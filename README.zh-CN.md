@@ -2,59 +2,77 @@
 
 # ComfyUI 参数检视台
 
-把一个 ComfyUI 的 `output` 文件夹拖进浏览器，逐张看清**这张图是怎么生成的**：LoRA 执行链和每一档强度、采样参数、底模 / CLIP / VAE、正向反向提示词，以及画布上摆着却根本没参与出图的旁路节点。
+**一张图，就是一份完整配方。** 把 ComfyUI 生成的 PNG 拖进来，直接得到产出它的工作流、整条 LoRA 链和全部采样参数——能原样导出、也能按参数在你自己的模板上重建。
 
-纯前端、零依赖、零上传——PNG 不出本机，没有任何网络请求。
+单页应用，双击 `index.html` 就能用。零依赖、零上传：图片不出你的机器，没有任何网络请求。
 
 ![界面示意](docs/screenshot.jpg)
 
 > 截图中的文件名、模型名、LoRA 名与提示词全部是合成的示例数据，不对应任何真实素材。
 
-## 解决的问题
+---
 
-ComfyUI 把两份 JSON 写进 PNG 的 `tEXt` 块：`prompt`（提交给服务端的 API 图）和 `workflow`（画布图）。问题在于：
+## 三十秒看懂它在干什么
 
-- 画布上看不出**这一张**到底用了什么——滑块被人拖过、LoRA 被 bypass、提示词在自定义节点里被改写，文件名和缩略图都不会告诉你。
-- 直接读 `CLIPTextEncode` 的 `text` 常常是空串，因为提示词是**用连线**接进来的（例如 `ZhPromptEnhance` 的输出）。
-- 画布上摆着的 LoRA 不等于参与执行——`mode: 4` 的节点在执行图里根本不存在。
-- 想复现一张老图，得逐个节点回忆参数。
+| 你想做的事 | 它怎么给 |
+|---|---|
+| 「这张图当初怎么生成的？」 | 拖进 PNG（或整个 `output` 文件夹）→ 每条都在眼前：LoRA 顺序与强度、种子/步数/CFG/采样器、底模、CLIP、VAE、正反向提示词 |
+| 「我要把这次的效果再做一遍」 | 点**导出这张图的工作流 JSON** → 得到一个 `.workflow.json`，拖回 ComfyUI 画布就能跑 |
+| 「图上没有工作流块，只有参数」 | 点**载入模板**选你现在的常用工作流 → 点**用模板重建** → 参数（含整条 LoRA 链）全部套进去，导出一份新工作流 |
+| 「我要查一堆老图的参数」 | 导出 CSV / JSON，或顶栏**导出工作流 ZIP** 批量打包 |
 
-这个工具把上面这些都摊平成一张表。
+---
+
+## 它解决的是四件「你以为你看得见，其实看不见」的事
+
+1. **画布上摆着 ≠ 真的跑了。** 演示图里 `#91`、`#92` 两个 LoRA 就摆在那儿，但它们是 `mode: 4`（旁路），执行图里根本不存在。工具会单独把它们列出来，标明「摆着但没参与」。
+2. **提示词直接读是空的。** `CLIPTextEncode.text` 经常是空串，因为文本是从别的节点**连线**过来的（比如 `ZhPromptEnhance` 的输出）。工具顺着连线走到源头，并注明来源：`CLIPTextEncode#4.text[slot 0] ← ZhPromptEnhance#79.text[slot 0]`。
+3. **反向词可能是运行时算出来的。** 增强器的槽位 1 是它现场生成的，PNG 里没存定值。工具标「运行时生成」，而不是拿它的输入冒充结果。
+4. **参数散落在几十个节点里。** 17 个 LoRA 串成一条链，谁在谁后面、各是几档——工具从 `KSampler.model` 一路往回爬，按真实执行顺序排给你看。
+
+---
 
 ## 功能
 
-- **浏览**：选择文件夹（递归）/ 拖入文件夹 / 拖入单张 PNG；左侧列表带行内缩略图，右侧详情 212px 预览可点击放大。
-- **参数**：种子、步数、CFG、采样器 / 调度器、降噪、latent 尺寸、底模、CLIP（含类型）、VAE、保存前缀、采样前调节（`ModelSamplingAuraFlow` / `CFGNorm` 等）。
-- **LoRA 执行链**：从 `KSampler.model` 输入往回爬，按真实执行顺序列出每个 LoRA 与强度，并画成以 0 为基准的滑块（正绿负红）。
-- **旁路识别**：读出画布图里的 `mode: 4` / `mode: 2` 节点，标出「摆着但没参与」。
-- **提示词**：顺着连线找到真正的源头，并注明来源与槽位，例如
-  `CLIPTextEncode#4.text[slot 0] ← ZhPromptEnhance#79.text[slot 0]`。
-  多输出节点的非 0 槽位（如增强器生成的反向词）标记为「运行时生成」，不会当成定值骗你。
+- **浏览**：选文件夹（递归）/ 拖文件夹 / 拖单张；列表行内带缩略图，详情页 212px 预览可点击放大。
+- **参数**：种子、步数、CFG、采样器 / 调度器、降噪、latent、底模、CLIP（含类型）、VAE、保存前缀、采样前调节（`ModelSamplingAuraFlow`、`CFGNorm` …）。
+- **LoRA 执行链**：按执行顺序 + 强度，画成以 0 为基准的滑块（正绿负红），可一键复制整条链。
+- **提示词**：连线溯源 + 槽位标注，正文可展开、可复制。
 - **搜索**：文件名 / LoRA 名 / 提示词正文，`Ctrl+K` 聚焦，`↑` `↓` 切图。
 - **导出**：参数表 CSV（带 BOM，Excel 直接开）、参数 JSON。
-- **工作流导出**：把 PNG 里的 `workflow` 块原样导出成可导入 ComfyUI 的 `.workflow.json`；批量打包成 zip。
-- **模板重建**：用一份现有工作流当模板，把解析出的参数（含整条 LoRA 链）套进去，生成一份**新**工作流 JSON。模板只读深拷贝，绝不回写。
+- **工作流导出**：原样导出 `.workflow.json`；或整批打包成 zip。
+- **模板重建**：用现有工作流当模板套参数，产出新工作流；模板只读深拷贝，绝不回写。
+- **DSH 插件**：同一套解析逻辑也做成 DeepSeek Harness 组合包，模型可直接调用 `comfy_png_inspect`。
+
+---
 
 ## 快速开始
 
 ```bash
-git clone https://github.com/<you>/comfy-png-inspector.git
+git clone https://github.com/zzcyydshhh/comfy-png-inspector.git
 cd comfy-png-inspector
 ```
 
-双击 `index.html`（Chrome / Edge 103+，需要 `DecompressionStream`），然后把 ComfyUI 的 `output` 文件夹拖进窗口。
+双击 `index.html`（Chrome / Edge 103+，需要 `DecompressionStream`），把 ComfyUI 的 `output` 文件夹拖进窗口。
 
-也可以在仓库 Pages 里直接开（纯静态，无需服务端）。
+也可以在仓库 Pages 里直接打开，纯静态无需服务端。
 
-### 导出工作流 / 模板重建
+---
 
-1. 点顶栏「载入模板」，选一份画布工作流 JSON（`ComfyUI/user/default/workflows/*.json`）。
-2. 选中一张图：
-   - PNG 带 `workflow` 块 → 点「导出这张图的工作流 JSON」，得到与出图那一刻完全一致的画布；
-   - 只有 API 图 → 点「用模板重建并导出」，得到 `<图名>.rebuilt.json`，并显示逐项变更清单。
-3. 顶栏「导出工作流 ZIP」把当前筛选结果里所有带 `workflow` 块的图批量打包。
+## 复现工作流：两种模式，别搞混
 
-重建会：替换底模 / CLIP / VAE / latent 宽高 / `SaveImage` 前缀 / 提示词 / KSampler 各项，并**按解析出的顺序重建整条 LoRA 链**，末尾接回模板里原本的消费者节点。
+选中一张图后，详情页顶部有两个按钮，区别在**数据够不够**：
+
+| | 原样导出 | 用模板重建 |
+|---|---|---|
+| 按钮 | 导出这张图的工作流 JSON | 用模板重建并导出 |
+| 前提 | PNG 里带 `workflow` 块 | 先载入任意一份画布工作流当模板 |
+| 结果 | 出图那一刻的画布，节点位置/连线/旁路状态完全一致 | 以模板的节点布局为准，把参数灌进去 |
+| 适合 | 直接复现，最可靠 | 图只有 API 图；或想套回自己现在的模板体系 |
+
+重建会替换：底模 / CLIP / VAE / latent 宽高 / `SaveImage` 前缀 / 提示词 / KSampler 各项，并**按解析出的顺序重建整条 LoRA 链**，把链尾接回模板原本的消费者节点（例如 `ModelSamplingAuraFlow` 的 `model` 输入）。导出前会列一份逐项变更清单，最后跑自检：连线端点是否存在、有无自连、KSampler 接线是否完整。
+
+---
 
 ## 命令行版
 
@@ -63,34 +81,38 @@ cd comfy-png-inspector
 ```bash
 python cli/comfy_png_parse.py ./output --no-text
 python cli/comfy_png_parse.py ./output --csv index.csv --json index.json
-python cli/comfy_png_parse.py a.png --full     # 提示词全文
+python cli/comfy_png_parse.py a.png --full     # 打印提示词全文
 ```
 
-只依赖 Python 标准库。输出与网页版一致。
+纯标准库，输出与网页版一致。
+
+---
 
 ## DeepSeek Harness 插件
 
-仓库同时是一个 DSH 组合包（`package.json` 里声明了 `dsh.bundle`）。装进 Harness 后，模型多一个工具：
+仓库同时是一个 DSH 组合包（`package.json` 里的 `dsh.bundle`）。装进 Harness 后，模型多一个工具：
 
 ```
 comfy_png_inspect(path, limit?, include_prompt?)
 ```
 
-传一个 PNG 路径或一个 `output` 目录，返回每张图的 LoRA 执行链与强度、采样参数、底模 / CLIP / VAE、latent 尺寸、正反向提示词，以及画布上被旁路的节点。解析逻辑与网页版共用 `comfy-png-core.js`，没有第二份实现。
+传一个 PNG 或一个 `output` 目录，返回每张图的 LoRA 链、采样参数、底模 / CLIP / VAE、latent、提示词与旁路节点。解析逻辑与网页版共用 `comfy-png-core.js`，没有第二份实现。
 
 ```bash
 dsh plugin add https://github.com/zzcyydshhh/comfy-png-inspector
 ```
 
-工具定义在 `lib/index.js`，插件行由 `cordis.patch.yml` 声明。
+---
 
 ## 原理笔记
 
-1. **PNG 块解析**：读 `tEXt` / `zTXt` / `iTXt`，`zTXt` 与压缩 `iTXt` 用 `DecompressionStream('deflate')`（zlib 流）解压。
-2. **执行链回溯**：`KSampler.model` → 逐层 `inputs.model` 往回走，节点类型决定归类（`LoraLoader*` = 滑块，`CFGNorm` / `ModelSampling*` = 采样前调节）。到 `UNETLoader` / `CheckpointLoaderSimple` 停，最后反转成执行顺序。
-3. **旁路判定**：只看 `workflow.nodes[].mode`，`4` = bypass、`2` = mute；API 图里没有它们，这正是「摆着不等于生效」。
-4. **提示词解析**：`text` 是字符串就直接用；是 `[节点id, 槽位]` 就顺着连线走到源头。槽位 ≠ 0 视为该节点运行时生成的输出，不当定值。
-5. **模板重组**：深拷贝模板 → 摘掉原有 LoRA 节点与连线 → 按解析顺序新建节点串成链 → 接回原消费者 → 自检（端点存在性、自连、KSampler 接线、LoRA 数量）。
+1. **PNG 块解析**：读 `tEXt` / `zTXt` / `iTXt`；`zTXt` 与压缩 `iTXt` 用 `DecompressionStream('deflate')`（zlib 流）解压。
+2. **执行链回溯**：从 `KSampler.model` 沿 `inputs.model` 往回走，按节点类型归类（`LoraLoader*` = 滑块，`CFGNorm` / `ModelSampling*` = 采样前调节），到 `UNETLoader` / `CheckpointLoaderSimple` 停，最后反转成执行顺序。
+3. **旁路判定**：只看 `workflow.nodes[].mode`，`4` = bypass、`2` = mute。它们不在 API 图里，这正是「摆着不等于生效」。
+4. **提示词解析**：`text` 是字符串直接用；是 `[节点id, 槽位]` 就顺着连线找源头；槽位 ≠ 0 视为运行时生成，不当定值。
+5. **模板重组**：深拷贝模板 → 摘掉原有 LoRA 节点与连线 → 按解析顺序新建节点串成链 → 接回原消费者 → 自检。
+
+---
 
 ## 已知限制
 
@@ -98,13 +120,17 @@ dsh plugin add https://github.com/zzcyydshhh/comfy-png-inspector
 - 图片被截图工具、微信、PS 等重新保存过会丢 `tEXt`，界面会标「没有 ComfyUI 元数据」。
 - `file://` 下浏览器不允许 JS 自己扫目录，必须手动选或拖一次。
 - 重建以**模板的节点类**为准：PNG 里有、模板里没有的普通节点不会凭空生成（LoRA 节点例外，会按数量重建）。导出前看一眼变更清单即可。
-- zip 打包是 store 模式（不压缩），换来零依赖；几百张工作流大概十几 MB。
+- zip 打包是 store 模式（不压缩），换来零依赖；几百份工作流大概十几 MB。
+
+---
 
 ## 目录
 
 ```
-index.html            单页应用（UI + 交互）
-comfy-png-core.js     解析与重组核心，浏览器 / Node 通用（UMD 风格）
+index.html              单页应用（UI + 交互）
+comfy-png-core.js       解析与重组核心，浏览器 / Node 通用
+lib/index.js            DSH 插件：comfy_png_inspect 工具
+cordis.patch.yml        DSH 组合包的插件行声明
 cli/comfy_png_parse.py  命令行等价物，纯标准库
 ```
 
