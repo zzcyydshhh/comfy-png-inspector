@@ -68,6 +68,22 @@ python cli/comfy_png_parse.py a.png --full     # full prompt text
 
 Standard library only. Same output as the web UI.
 
+## DeepSeek Harness plugin
+
+This repository is also a DSH bundle (`dsh.bundle` is declared in `package.json`). Installed into the Harness it adds one model-facing tool:
+
+```
+comfy_png_inspect(path, limit?, include_prompt?)
+```
+
+Point it at a PNG or at a ComfyUI `output` directory and it reports, per image, the LoRA execution chain with strengths, sampler settings, base model / CLIP / VAE, latent size, prompts, and any bypassed canvas nodes. Parsing is shared with the web UI through `comfy-png-core.js` — there is no second implementation.
+
+```bash
+dsh plugin add https://github.com/zzcyydshhh/comfy-png-inspector
+```
+
+The tool lives in `lib/index.js`; the plugin row is declared by `cordis.patch.yml`.
+
 ## How it works
 
 1. **PNG chunk parsing**: reads `tEXt` / `zTXt` / `iTXt`; `zTXt` and compressed `iTXt` are inflated with `DecompressionStream('deflate')` (zlib stream).

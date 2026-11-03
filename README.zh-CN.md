@@ -68,6 +68,22 @@ python cli/comfy_png_parse.py a.png --full     # 提示词全文
 
 只依赖 Python 标准库。输出与网页版一致。
 
+## DeepSeek Harness 插件
+
+仓库同时是一个 DSH 组合包（`package.json` 里声明了 `dsh.bundle`）。装进 Harness 后，模型多一个工具：
+
+```
+comfy_png_inspect(path, limit?, include_prompt?)
+```
+
+传一个 PNG 路径或一个 `output` 目录，返回每张图的 LoRA 执行链与强度、采样参数、底模 / CLIP / VAE、latent 尺寸、正反向提示词，以及画布上被旁路的节点。解析逻辑与网页版共用 `comfy-png-core.js`，没有第二份实现。
+
+```bash
+dsh plugin add https://github.com/zzcyydshhh/comfy-png-inspector
+```
+
+工具定义在 `lib/index.js`，插件行由 `cordis.patch.yml` 声明。
+
 ## 原理笔记
 
 1. **PNG 块解析**：读 `tEXt` / `zTXt` / `iTXt`，`zTXt` 与压缩 `iTXt` 用 `DecompressionStream('deflate')`（zlib 流）解压。

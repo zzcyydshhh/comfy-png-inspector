@@ -1,0 +1,5 @@
+# Registers one model-facing tool, `comfy_png_inspect`, which reads a
+# ComfyUI-generated PNG and reports how the image was produced.
+- insert:
+    - id: comfy-png-inspector
+      name: dsh-comfy-png-inspector
