@@ -1,0 +1,20 @@
+# 私有数据：本地跑出来的索引里含提示词全文，别提交
+*.csv
+index.json
+output*
+!output.example.json
+
+# 生成的图片与自定义节点产物
+*.png
+*.webp
+!docs/*.png
+!docs/*.jpg
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+node_modules/
+__pycache__/
+*.pyc
