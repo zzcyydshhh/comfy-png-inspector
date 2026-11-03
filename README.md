@@ -1,4 +1,4 @@
-**English** ｜ [简体中文](README.zh-CN.md)
+﻿**English** ｜ [简体中文](README.zh-CN.md)
 
 # ComfyUI Params Inspector
 
@@ -6,7 +6,7 @@
 
 A single page you open by double-clicking `index.html`. No dependencies, no uploads: images never leave your machine and nothing touches the network.
 
-![Interface](docs/screenshot.jpg)
+![Interface](docs/screenshot-en.jpg)
 
 > Every filename, model name, LoRA name and prompt in the screenshot is synthetic demo data, unrelated to any real asset. The UI itself is in Simplified Chinese.
 
@@ -53,7 +53,11 @@ git clone https://github.com/zzcyydshhh/comfy-png-inspector.git
 cd comfy-png-inspector
 ```
 
-Open `index.html` (Chrome / Edge 103+, `DecompressionStream` required) and drag your ComfyUI `output` folder into the window. GitHub Pages works too — it is pure static.
+Open **`comfy-png-inspector.html`** (Chrome / Edge 103+, `DecompressionStream` required) and drag your ComfyUI `output` folder into the window.
+
+- The `index.html` at the repo root is a one-line redirect kept for GitHub Pages; opening it offline lands on the app too.
+- The UI is **bilingual (Chinese / English)**: switch with `中文 / EN` in the top bar, the choice is remembered, and the default follows your browser language.
+- Force a language with the URL: `comfy-png-inspector.html?lang=en` (or `?lang=zh`).
 
 ---
 
@@ -123,8 +127,9 @@ dsh plugin add https://github.com/zzcyydshhh/comfy-png-inspector
 ## Layout
 
 ```
-index.html              single-page app (UI + interaction)
-comfy-png-core.js       parsing & rebuild core, browser and Node
+comfy-png-inspector.html  single-page app (UI + interaction, bilingual)
+index.html                redirect kept for the GitHub Pages root
+comfy-png-core.js         parsing & rebuild core, browser and Node
 lib/index.js            DSH plugin: the comfy_png_inspect tool
 cordis.patch.yml        DSH bundle plugin rows
 cli/comfy_png_parse.py  CLI equivalent, standard library only

@@ -1,0 +1,1049 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Read ComfyUI PNG metadata: LoRA chain with strengths, sampler settings, prompts — and export the workflow that made the image.">
+<title>ComfyUI 参数检视台</title>
+<style>
+  :root{
+    --bg:#0b0f14; --bg2:#10161e; --panel:#141b23; --panel2:#1a222c; --line:#26313d;
+    --fg:#e8eef5; --dim:#8f9dad; --dim2:#606e7e;
+    --acc:#4dd4ac; --acc2:#7aa2ff; --warn:#f0a44e; --bad:#e2646b;
+    --mono:"Cascadia Mono","JetBrains Mono",Consolas,"SF Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;color:var(--fg);
+    background:
+      radial-gradient(1100px 640px at 12% -8%, #17242f 0%, transparent 62%),
+      radial-gradient(900px 520px at 96% 0%, #1a2033 0%, transparent 58%),
+      var(--bg);
+    font:14px/1.55 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    overflow:hidden;
+  }
+  header{
+    display:flex;align-items:center;gap:12px;padding:9px 16px;
+    background:rgba(20,27,35,.94);border-bottom:1px solid var(--line);backdrop-filter:blur(10px);
+  }
+  .logo{display:flex;align-items:center;gap:9px;font-weight:650;letter-spacing:.2px;white-space:nowrap}
+  .logo i{width:11px;height:11px;border-radius:3px;background:linear-gradient(135deg,var(--acc),var(--acc2));display:block;
+    box-shadow:0 0 12px rgba(77,212,172,.45)}
+  .stat{color:var(--dim);font-size:12.5px;white-space:nowrap}
+  header .spacer{flex:1}
+  button{
+    font:inherit;color:var(--fg);background:var(--panel2);border:1px solid var(--line);
+    border-radius:8px;padding:6px 11px;cursor:pointer;transition:.15s;white-space:nowrap;
+  }
+  button:hover{background:#232e3a;border-color:#33414f;transform:translateY(-1px)}
+  button:active{transform:translateY(0)}
+  button.primary{background:linear-gradient(180deg,#217764,#185a4b);border-color:#2c8a73;font-weight:500}
+  button.primary:hover{background:linear-gradient(180deg,#26866f,#1b6653)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  input[type=search],select{
+    font:inherit;color:var(--fg);background:#0d1218;border:1px solid var(--line);
+    border-radius:8px;padding:6px 10px;outline:none;transition:.15s;
+  }
+  input[type=search]:focus,select:focus{border-color:#3a7268;box-shadow:0 0 0 3px rgba(77,212,172,.10)}
+  .lang{
+    display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0d1218;
+  }
+  .lang button{
+    border:0;border-radius:0;background:transparent;padding:5px 9px;font-size:12.5px;color:var(--dim);
+  }
+  .lang button.on{background:#1d3a34;color:var(--acc)}
+  .lang button:hover{transform:none;background:#182028}
+  main{display:grid;grid-template-columns:344px 1fr;height:calc(100% - 54px)}
+  aside{border-right:1px solid var(--line);display:flex;flex-direction:column;background:rgba(20,27,35,.5);min-height:0}
+  .aside-top{padding:10px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line)}
+  .row{display:flex;gap:8px}
+  .row > *{flex:1;min-width:0}
+  #list{overflow:auto;flex:1;padding:6px}
+  .item{
+    padding:6px 8px;border-radius:9px;cursor:pointer;border:1px solid transparent;
+    display:flex;align-items:center;gap:9px;transition:.12s;
+  }
+  .item:hover{background:#1a222c}
+  .item.sel{background:#1b2b31;border-color:#2f5c58;box-shadow:inset 2px 0 0 var(--acc)}
+  .item .body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .item .mini{
+    width:44px;height:44px;flex:none;border-radius:7px;object-fit:cover;
+    border:1px solid #2a3540;background:#0b0e12;display:block;
+  }
+  .item.sel .mini{border-color:#3a7d74}
+  .item.bad .mini{opacity:.45}
+  .item .n{font-size:13px;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item .m{font-size:11.5px;color:var(--dim2);display:flex;gap:8px;font-variant-numeric:tabular-nums}
+  .item.bad .n{color:var(--warn)}
+  .empty{padding:26px 18px;color:var(--dim2);font-size:13px;text-align:center;line-height:1.8}
+  section.detail{overflow:auto;padding:18px 22px 64px;min-width:0}
+  .drop{
+    border:1.5px dashed #2d3b49;border-radius:14px;padding:46px 24px;text-align:center;color:var(--dim);
+    background:linear-gradient(180deg,rgba(26,34,44,.55),rgba(20,27,35,.15));transition:.18s;
+  }
+  .drop.hot{border-color:var(--acc);background:rgba(77,212,172,.07);color:var(--fg)}
+  .drop h2{margin:0 0 8px;font-size:17px;font-weight:600;color:var(--fg)}
+  .drop p{margin:6px 0;font-size:13px}
+  .kbd{font-family:var(--mono);background:#0d1218;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12px}
+  .hdr{display:flex;gap:16px;align-items:flex-start;margin-bottom:14px}
+  .thumb-wrap{position:relative;flex:none}
+  .thumb{
+    width:212px;max-height:288px;height:auto;border-radius:10px;border:1px solid #33414f;display:block;
+    background:#0b0e12;object-fit:contain;cursor:zoom-in;transition:.16s;
+    box-shadow:0 6px 18px rgba(0,0,0,.45);
+  }
+  .thumb:hover{border-color:var(--acc);box-shadow:0 8px 26px rgba(0,0,0,.6)}
+  .thumb-wrap .zoomhint{
+    position:absolute;right:8px;bottom:8px;font-size:11px;color:#cfe6df;background:rgba(10,14,18,.72);
+    border:1px solid #2f5c58;border-radius:6px;padding:1px 7px;pointer-events:none;opacity:0;transition:.16s;
+  }
+  .thumb-wrap:hover .zoomhint{opacity:1}
+  #lightbox{
+    position:fixed;inset:0;background:rgba(6,9,12,.93);display:none;z-index:80;
+    padding:28px;cursor:zoom-out;
+  }
+  #lightbox.on{display:flex;align-items:center;justify-content:center}
+  #lightbox img{max-width:100%;max-height:calc(100vh - 56px);border-radius:10px;
+    box-shadow:0 18px 60px rgba(0,0,0,.7);border:1px solid #2b3742}
+  #lightbox .cap{position:absolute;top:14px;left:20px;right:20px;color:#cfd9e4;font-size:12.5px;
+    font-family:var(--mono);opacity:.85;pointer-events:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hdr h1{font-size:17px;margin:0 0 4px;font-weight:600;word-break:break-all}
+  .wftools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 6px}
+  .wftools .hint{color:var(--dim2);font-size:12px}
+  .rep{
+    background:#121a21;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0 4px;
+    font-family:var(--mono);font-size:12px;line-height:1.6;max-height:230px;overflow:auto;color:#c8d3de;
+  }
+  .rep .ok{color:var(--acc)}
+  .rep .wn{color:var(--warn)}
+  .rep .t{color:var(--dim);margin-bottom:4px;font-family:inherit}
+  .sub{color:var(--dim);font-size:12.5px;font-variant-numeric:tabular-nums}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:14px 0 18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 11px;transition:.15s}
+  .card:hover{border-color:#33414f}
+  .card .k{font-size:11.5px;color:var(--dim2);letter-spacing:.4px;text-transform:uppercase}
+  .card .v{font-family:var(--mono);font-size:13.5px;margin-top:3px;word-break:break-all;color:var(--fg)}
+  h3.sec{font-size:12.5px;letter-spacing:.6px;color:var(--dim);text-transform:uppercase;margin:24px 0 10px;
+    display:flex;align-items:center;gap:9px}
+  h3.sec::after{content:"";flex:1;height:1px;background:var(--line)}
+  h3.sec .cnt{color:var(--dim2);font-weight:400}
+  .lora{display:grid;grid-template-columns:26px 1fr 78px 150px;align-items:center;gap:10px;padding:5px 4px;
+    font-size:13px;border-bottom:1px solid rgba(38,49,61,.55);border-radius:6px;transition:.12s}
+  .lora:hover{background:rgba(26,34,44,.6)}
+  .lora .idx{color:var(--dim2);font-family:var(--mono);font-size:11.5px;text-align:right}
+  .lora .nm{font-family:var(--mono);font-size:12.5px;color:#cfd9e4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lora .nm .dir{color:var(--dim2)}
+  .lora .val{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+  .track{position:relative;height:8px;background:#0c1116;border:1px solid #202932;border-radius:6px;overflow:hidden}
+  .track .zero{position:absolute;top:0;bottom:0;width:1px;background:#39434f}
+  .track .fill{position:absolute;top:0;bottom:0;border-radius:4px}
+  .fill.pos{background:linear-gradient(90deg,rgba(77,212,172,.35),var(--acc))}
+  .fill.neg{background:linear-gradient(270deg,rgba(226,100,107,.35),var(--bad))}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:#1a222c;border:1px solid var(--line);
+    border-radius:999px;padding:3px 10px;font-size:12px;margin:0 6px 6px 0;font-family:var(--mono)}
+  .chip.by{color:var(--warn);border-color:#4a3a24;background:#241d14}
+  .prompt{
+    position:relative;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 44px 12px 13px;
+  }
+  .prompt pre{
+    margin:0;white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:12.5px;
+    line-height:1.65;color:#d5dee7;max-height:340px;overflow:auto;
+  }
+  .prompt pre.clip{max-height:96px;overflow:hidden;-webkit-mask-image:linear-gradient(#000 55%,transparent)}
+  .prompt .tools{position:absolute;top:8px;right:8px;display:flex;gap:6px}
+  .iconbtn{background:#1e2732;border:1px solid var(--line);border-radius:7px;width:28px;height:28px;
+    display:grid;place-items:center;cursor:pointer;color:var(--dim);font-size:13px}
+  .iconbtn:hover{color:var(--fg);border-color:#3a4757}
+  .meta-line{color:var(--dim2);font-size:11.5px;font-family:var(--mono);margin:6px 0 0}
+  table.sum{width:100%;border-collapse:collapse;font-size:12.5px;font-family:var(--mono)}
+  table.sum th,table.sum td{padding:6px 8px;text-align:left;border-bottom:1px solid rgba(38,49,61,.6);white-space:nowrap}
+  table.sum th{position:sticky;top:0;background:#131a21;color:var(--dim);font-weight:500;z-index:1}
+  table.sum tbody tr{cursor:pointer}
+  table.sum tbody tr:hover{background:#1a222c}
+  .toast{
+    position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(14px);
+    background:#1d2b33;border:1px solid #2f5c58;color:var(--fg);padding:9px 16px;border-radius:9px;
+    opacity:0;transition:.22s;pointer-events:none;font-size:13px;z-index:90;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .bar-progress{height:3px;background:#0c1116;position:relative;overflow:hidden}
+  .bar-progress i{position:absolute;inset:0 100% 0 0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:right .2s}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#28323d;border-radius:6px;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:#36434f;background-clip:content-box}
+  ::-webkit-scrollbar-track{background:transparent}
+  @media (max-width:900px){
+    main{grid-template-columns:1fr;grid-template-rows:38% 1fr}
+    aside{border-right:none;border-bottom:1px solid var(--line)}
+    .lora{grid-template-columns:22px 1fr 62px 110px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><i></i><span data-i18n="appTitle">ComfyUI 参数检视台</span></div>
+  <div class="stat" id="stat">未载入图片</div>
+  <div class="spacer"></div>
+  <div class="lang">
+    <button id="langZh" type="button">中文</button>
+    <button id="langEn" type="button">EN</button>
+  </div>
+  <button id="btnFiles" class="primary" data-i18n="btnFiles">选择图片</button>
+  <button id="btnDir" data-i18n="btnDir">选择文件夹</button>
+  <button id="btnTpl" data-i18n="btnTpl" data-i18n-title="btnTplTitle">载入模板</button>
+  <span id="tplName" class="stat" style="max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+  <select id="sortSel" data-i18n-title="sortTitle"></select>
+  <button id="btnCsv" data-i18n="btnCsv">导出 CSV</button>
+  <button id="btnJson" data-i18n="btnJson">导出参数 JSON</button>
+  <button id="btnZip" data-i18n="btnZip" data-i18n-title="btnZipTitle">导出工作流 ZIP</button>
+  <button id="btnClear" data-i18n="btnClear">清空</button>
+</header>
+<div class="bar-progress"><i id="prog"></i></div>
+<main>
+  <aside>
+    <div class="aside-top">
+      <input type="search" id="search" data-i18n-ph="searchPh" placeholder="搜文件名 / LoRA 名 / 提示词（Ctrl+K）">
+      <div class="row">
+        <select id="viewSel"></select>
+        <button id="btnOnlyBy" data-i18n="btnOnlyBy" data-i18n-title="btnOnlyByTitle">含旁路</button>
+      </div>
+    </div>
+    <div id="list"></div>
+  </aside>
+  <section class="detail" id="detail"></section>
+</main>
+<div class="toast" id="toast"></div>
+<div id="lightbox"><div class="cap"></div><img alt=""></div>
+<input type="file" id="fileInput" accept="image/png" multiple hidden>
+<input type="file" id="dirInput" webkitdirectory directory multiple hidden>
+<input type="file" id="tplInput" accept=".json,application/json" hidden>
+
+<script src="comfy-png-core.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  /* ------------------------------ 文案 ------------------------------ */
+  var I18N = {
+    zh: {
+      appTitle: "ComfyUI 参数检视台",
+      statEmpty: "未载入图片",
+      statParsing: function (d, t) { return "解析中 " + d + "/" + t; },
+      statCount: function (n, m) { return n + " 张 · " + m + " 张有元数据"; },
+      btnFiles: "选择图片", btnDir: "选择文件夹", btnTpl: "载入模板",
+      btnTplTitle: "载入一份画布工作流 JSON 当模板；只读深拷贝，绝不改动它",
+      btnCsv: "导出 CSV", btnJson: "导出参数 JSON", btnZip: "导出工作流 ZIP",
+      btnZipTitle: "把筛选结果的画布工作流打包成 zip", btnClear: "清空",
+      sortTitle: "排序",
+      sortNewest: "时间 ↓", sortOldest: "时间 ↑", sortName: "文件名 ↑", sortSeed: "种子",
+      viewDetail: "详情视图", viewSum: "汇总表", btnOnlyBy: "含旁路",
+      btnOnlyByTitle: "只列出存在 bypass 节点的图",
+      searchPh: "搜文件名 / LoRA 名 / 提示词（Ctrl+K）",
+      templateLabel: function (n, c) { return "模板：" + n + "（" + c + " 节点 · 只读）"; },
+      templateTip: "只在内存里深拷贝，导出为新文件，不会改动原文件",
+      listNoMatch: "没有匹配的图片<br>清空搜索条件试试",
+      listEmpty: "把 ComfyUI 的 <b>output</b> 文件夹拖进来<br>或点右上角「选择文件夹」",
+      noMeta: "无元数据",
+      dropTitle: "拖入 ComfyUI 生成的 PNG",
+      dropLead: "整张图拖进来，或拖入 <span class=\"kbd\">output</span> 文件夹——会递归读全部 .png",
+      dropPrivacy: "元数据在 PNG 的 tEXt 块里，不走网络，不上传，全部在本机浏览器里完成",
+      dropKeys: "<span class=\"kbd\">Ctrl</span> + <span class=\"kbd\">K</span> 搜索 &nbsp;·&nbsp; <span class=\"kbd\">↑</span><span class=\"kbd\">↓</span> 切换图片",
+      zoomHint: "点击放大",
+      exportWf: "导出这张图的工作流 JSON",
+      rebuildExport: "用模板重建并导出",
+      rebuildCompare: "用模板重建（对照当前模板）",
+      hintVerbatim: "原样导出＝执行那一刻的画布：节点位置、连线、旁路状态、控件值都与出图时一致",
+      hintApiOnly: "这张图只存了 API 图，用模板补出画布才能导入 ComfyUI",
+      kSeed: "种子", kSteps: "步数", kCfg: "CFG", kSampler: "采样器", kDenoise: "降噪",
+      kLatent: "latent", kBase: "底模", kClip: "CLIP", kVae: "VAE", kPrefix: "保存前缀",
+      secPatches: "采样前调节", secLoras: "LoRA 执行链", secBypass: "未参与出图",
+      secPositive: "正向提示词", secNegative: "反向提示词", secNotes: "画布备注",
+      countUnit: function (n) { return n + " 个"; },
+      copyChain: "复制整条链",
+      noLoras: "（这张图没有 LoRA）",
+      bypassNote: "画布上摆着 ≠ 参与执行；这些节点在执行图里根本不存在",
+      promptGenerated: "（运行时生成 — 该节点的输出由它自己的输入算出来，PNG 里没有存这份文本）",
+      promptEmpty: "（空）",
+      expand: "展开/收起", copy: "复制",
+      metaChunks: function (k, a, b) { return "元数据块：" + k + "  ·  执行图 " + a + " 节点  ·  画布 " + b + " 节点"; },
+      sumTitle: "汇总", sumUnit: function (n) { return n + " 张"; }, sumEmpty: "没有数据",
+      thName: "文件名", thTime: "时间", thSize: "尺寸", thSteps: "步数", thCfg: "CFG",
+      thLora: "LoRA", thSeed: "种子", thBase: "底模",
+      toastCopied: function (n) { return "已复制 " + n + " 字"; },
+      toastCopyFail: "复制失败",
+      toastExportedWf: "已导出原样工作流（画布 JSON）",
+      toastNoWorkflow: "这张图没有画布工作流块，先「载入模板」重建",
+      toastNeedTemplate: "先点右上「载入模板」选一份画布工作流 JSON",
+      toastRebuildFail: function (m) { return "重建失败：" + m; },
+      toastRebuilt: function (n) { return "已按模板重建并导出（" + n + " 项变更）"; },
+      reportHead: function (name, n) { return "重建报告 · 模板 " + name + "（深拷贝，原文件未改动）· " + n + " 项变更"; },
+      reportMore: function (n) { return "… 另有 " + n + " 项"; },
+      reportClean: "自检通过：无悬空连线、KSampler 接线完整",
+      toastNoZip: "当前筛选结果里没有带画布工作流的图",
+      toastZipped: function (n, mb) { return "已打包 " + n + " 份工作流（" + mb + " MB）"; },
+      toastTplInvalid: "模板不是合法 JSON",
+      toastTplNotCanvas: "这不是画布工作流（缺 nodes 数组）——API 格式的 prompt JSON 当不了模板",
+      toastTplLoaded: function (n) { return "模板已载入：" + n; },
+      toastNoData: "没有数据",
+      toastCsv: function (n) { return "已导出 " + n + " 行"; },
+      toastJson: function (n) { return "已导出 " + n + " 条"; },
+      toastCleared: "已清空",
+      toastLoaded: function (n) { return "载入 " + n + " 张"; },
+      toastPngOnly: "只认得 .png（ComfyUI 元数据只写在 PNG 里）",
+      a1111Chunk: "parameters 块",
+      errNoMeta: "没有 ComfyUI 元数据（可能被软件重新保存过，元数据会丢）",
+      langLabel: "中文"
+    },
+    en: {
+      appTitle: "ComfyUI Params Inspector",
+      statEmpty: "No images loaded",
+      statParsing: function (d, t) { return "Parsing " + d + "/" + t; },
+      statCount: function (n, m) { return n + " images · " + m + " with metadata"; },
+      btnFiles: "Choose images", btnDir: "Choose folder", btnTpl: "Load template",
+      btnTplTitle: "Pick a canvas workflow JSON as a template; deep-copied, never modified",
+      btnCsv: "Export CSV", btnJson: "Export params JSON", btnZip: "Export workflows ZIP",
+      btnZipTitle: "Pack the filtered canvas workflows into a zip", btnClear: "Clear",
+      sortTitle: "Sort",
+      sortNewest: "Newest", sortOldest: "Oldest", sortName: "Name", sortSeed: "Seed",
+      viewDetail: "Detail", viewSum: "Table", btnOnlyBy: "Bypassed only",
+      btnOnlyByTitle: "Only list images with bypassed nodes",
+      searchPh: "Search filename / LoRA / prompt (Ctrl+K)",
+      templateLabel: function (n, c) { return "Template: " + n + " (" + c + " nodes · read-only)"; },
+      templateTip: "Deep-copied in memory; exported as a new file, the original is never touched",
+      listNoMatch: "No matches<br>Try clearing the search",
+      listEmpty: "Drop a ComfyUI <b>output</b> folder here<br>or use “Choose folder” above",
+      noMeta: "no metadata",
+      dropTitle: "Drop a ComfyUI PNG here",
+      dropLead: "Drop one image, or a whole <span class=\"kbd\">output</span> folder — every .png is read recursively",
+      dropPrivacy: "Metadata lives in the PNG tEXt chunk. No network, no uploads — everything runs in this browser.",
+      dropKeys: "<span class=\"kbd\">Ctrl</span> + <span class=\"kbd\">K</span> search &nbsp;·&nbsp; <span class=\"kbd\">↑</span><span class=\"kbd\">↓</span> switch image",
+      zoomHint: "click to zoom",
+      exportWf: "Export this image's workflow JSON",
+      rebuildExport: "Rebuild from template and export",
+      rebuildCompare: "Rebuild from template (compare)",
+      hintVerbatim: "Verbatim export = the canvas at generation time: node positions, links, bypass state, widget values",
+      hintApiOnly: "This PNG only carries the API graph; a template is needed to produce an importable canvas",
+      kSeed: "seed", kSteps: "steps", kCfg: "CFG", kSampler: "sampler", kDenoise: "denoise",
+      kLatent: "latent", kBase: "base model", kClip: "CLIP", kVae: "VAE", kPrefix: "save prefix",
+      secPatches: "Pre-sampler", secLoras: "LoRA chain", secBypass: "Not in the run",
+      secPositive: "Positive prompt", secNegative: "Negative prompt", secNotes: "Canvas notes",
+      countUnit: function (n) { return String(n); },
+      copyChain: "Copy the chain",
+      noLoras: "(no LoRA in this image)",
+      bypassNote: "On canvas ≠ in the run; these nodes are absent from the execution graph",
+      promptGenerated: "(generated at runtime — this node computes its output from its own inputs, the text is not stored in the PNG)",
+      promptEmpty: "(empty)",
+      expand: "Expand / collapse", copy: "Copy",
+      metaChunks: function (k, a, b) { return "chunks: " + k + "  ·  execution graph " + a + " nodes  ·  canvas " + b + " nodes"; },
+      sumTitle: "Summary", sumUnit: function (n) { return String(n); }, sumEmpty: "No data",
+      thName: "File", thTime: "Time", thSize: "Size", thSteps: "Steps", thCfg: "CFG",
+      thLora: "LoRA", thSeed: "Seed", thBase: "Base model",
+      toastCopied: function (n) { return "Copied " + n + " characters"; },
+      toastCopyFail: "Copy failed",
+      toastExportedWf: "Exported the workflow verbatim (canvas JSON)",
+      toastNoWorkflow: "This PNG has no canvas workflow chunk — load a template to rebuild",
+      toastNeedTemplate: "Load a template first (“Load template” in the top bar)",
+      toastRebuildFail: function (m) { return "Rebuild failed: " + m; },
+      toastRebuilt: function (n) { return "Rebuilt and exported (" + n + " changes)"; },
+      reportHead: function (name, n) { return "Rebuild report · template " + name + " (deep copy, original untouched) · " + n + " changes"; },
+      reportMore: function (n) { return "… " + n + " more"; },
+      reportClean: "Self-check passed: no dangling links, KSampler fully wired",
+      toastNoZip: "No images with a canvas workflow in the current filter",
+      toastZipped: function (n, mb) { return "Packed " + n + " workflows (" + mb + " MB)"; },
+      toastTplInvalid: "Template is not valid JSON",
+      toastTplNotCanvas: "Not a canvas workflow (missing nodes) — an API-format prompt JSON cannot be a template",
+      toastTplLoaded: function (n) { return "Template loaded: " + n; },
+      toastNoData: "No data",
+      toastCsv: function (n) { return "Exported " + n + " rows"; },
+      toastJson: function (n) { return "Exported " + n + " items"; },
+      toastCleared: "Cleared",
+      toastLoaded: function (n) { return "Loaded " + n + " images"; },
+      toastPngOnly: "PNG only — ComfyUI metadata lives in PNG chunks",
+      a1111Chunk: "parameters chunk",
+      errNoMeta: "No ComfyUI metadata (it is lost when an image is re-saved by another tool)",
+      langLabel: "EN"
+    }
+  };
+
+  function resolveLang() {
+    var q = new URLSearchParams(location.search).get("lang");
+    if (q && I18N[q]) return q;
+    var saved = null;
+    try { saved = localStorage.getItem("comfy-png-inspector:lang"); } catch (e) {}
+    if (saved && I18N[saved]) return saved;
+    var nav = (navigator.language || "zh").toLowerCase();
+    return nav.indexOf("zh") === 0 ? "zh" : "en";
+  }
+
+  var LANG = resolveLang();
+  function t(key) {
+    var table = I18N[LANG] || I18N.zh;
+    var v = table[key];
+    if (v === undefined) v = I18N.zh[key];
+    if (typeof v === "function") return v.apply(null, Array.prototype.slice.call(arguments, 1));
+    return v === undefined ? key : v;
+  }
+
+  /* ------------------------------ 状态 ------------------------------ */
+  var state = {
+    items: [], filtered: [], selected: null, onlyBypass: false,
+    view: "detail", template: null
+  };
+  var uid = 0;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var el = function (tag, cls, txt) {
+    var d = document.createElement(tag);
+    if (cls) d.className = cls;
+    if (txt !== undefined) d.textContent = txt;
+    return d;
+  };
+  function toast(msg) {
+    var box = $("toast");
+    box.textContent = msg; box.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { box.classList.remove("show"); }, 2000);
+  }
+  function fmtTime(ts) {
+    if (!ts) return "";
+    var d = new Date(ts);
+    var p = function (n) { return String(n).padStart(2, "0"); };
+    return d.getFullYear() + "/" + p(d.getMonth() + 1) + "/" + p(d.getDate()) + " " +
+           p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+  }
+  function fmtNum(v, nd) {
+    if (v === undefined || v === null || v === "") return "—";
+    if (typeof v === "number") return Number.isInteger(v) ? String(v) : v.toFixed(nd === undefined ? 2 : nd);
+    return String(v);
+  }
+  function errorText(r) {
+    if (!r || !r.error) return "";
+    if (r.error.indexOf("没有 ComfyUI 元数据") >= 0 || r.error.indexOf("No ComfyUI metadata") >= 0) return t("errNoMeta");
+    return r.error;
+  }
+
+  /* ------------------------------ 静态文案 ------------------------------ */
+  function fillSelect(sel, options, current) {
+    sel.innerHTML = "";
+    options.forEach(function (o) {
+      var op = document.createElement("option");
+      op.value = o[0]; op.textContent = t(o[1]);
+      sel.appendChild(op);
+    });
+    if (current) sel.value = current;
+  }
+
+  function applyStatic() {
+    document.documentElement.lang = LANG === "en" ? "en" : "zh-CN";
+    document.title = t("appTitle");
+    document.querySelectorAll("[data-i18n]").forEach(function (n) { n.textContent = t(n.getAttribute("data-i18n")); });
+    document.querySelectorAll("[data-i18n-ph]").forEach(function (n) { n.placeholder = t(n.getAttribute("data-i18n-ph")); });
+    document.querySelectorAll("[data-i18n-title]").forEach(function (n) { n.title = t(n.getAttribute("data-i18n-title")); });
+    $("langZh").classList.toggle("on", LANG === "zh");
+    $("langEn").classList.toggle("on", LANG === "en");
+    fillSelect($("sortSel"), [["mtime-desc", "sortNewest"], ["mtime-asc", "sortOldest"], ["name-asc", "sortName"], ["seed", "sortSeed"]], $("sortSel").value || "mtime-desc");
+    fillSelect($("viewSel"), [["detail", "viewDetail"], ["sum", "viewSum"]], $("viewSel").value || "detail");
+    if (state.template) {
+      $("tplName").textContent = t("templateLabel", state.template.name, state.template.nodes);
+      $("tplName").title = t("templateTip");
+      $("tplName").style.color = "var(--acc)";
+    }
+    updateStat();
+  }
+
+  function setLang(next) {
+    if (!I18N[next] || next === LANG) return;
+    LANG = next;
+    try { localStorage.setItem("comfy-png-inspector:lang", next); } catch (e) {}
+    applyStatic();
+    renderList();
+    renderDetail();
+    updateStat();
+  }
+
+  /* ------------------------------ 载入 ------------------------------ */
+  function addFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList).filter(function (f) { return /\.png$/i.test(f.name); });
+    if (!files.length) { toast(t("toastPngOnly")); return; }
+    var queue = files.slice(), total = queue.length, done = 0;
+    var CONC = 6;
+
+    function tick() {
+      done++;
+      $("prog").style.right = (100 - (done / total) * 100) + "%";
+      $("stat").textContent = t("statParsing", done, total);
+      if (done === total) {
+        setTimeout(function () { $("prog").style.right = "100%"; updateStat(); }, 260);
+        applyFilter();
+        if (!state.selected && state.filtered.length) select(state.filtered[0].id);
+      }
+    }
+    function next() {
+      var f = queue.shift();
+      if (!f) return Promise.resolve();
+      return f.arrayBuffer().then(function (buf) {
+        return ComfyPNG.parsePng(new Uint8Array(buf), {
+          name: f.name,
+          path: f.webkitRelativePath || f.name,
+          size: f.size,
+          mtime: f.lastModified,
+          lang: LANG
+        });
+      }).then(function (rec) {
+        state.items.push({ id: ++uid, name: f.name, rec: rec, file: f, url: URL.createObjectURL(f) });
+        tick();
+      }).catch(function (e) {
+        state.items.push({ id: ++uid, name: f.name,
+          rec: { name: f.name, error: String(e && e.message || e) },
+          file: f, url: URL.createObjectURL(f) });
+        tick();
+      }).then(next);
+    }
+    var lanes = [];
+    for (var i = 0; i < Math.min(CONC, total); i++) lanes.push(next());
+    Promise.all(lanes).then(function () { toast(t("toastLoaded", total)); });
+  }
+
+  async function addFromDrop(dt) {
+    var items = Array.prototype.slice.call(dt.items || []);
+    var entries = items.map(function (it) { return it.webkitGetAsEntry && it.webkitGetAsEntry(); }).filter(Boolean);
+    if (!entries.length) { addFiles(dt.files); return; }
+    var files = [];
+    async function walk(entry) {
+      if (entry.isFile) {
+        await new Promise(function (res) {
+          entry.file(function (f) { files.push(f); res(); }, function () { res(); });
+        });
+      } else if (entry.isDirectory) {
+        var reader = entry.createReader(), batch;
+        do {
+          batch = await new Promise(function (res) { reader.readEntries(res, function () { res([]); }); });
+          for (var i = 0; i < batch.length; i++) await walk(batch[i]);
+        } while (batch.length);
+      }
+    }
+    for (var i = 0; i < entries.length; i++) await walk(entries[i]);
+    addFiles(files);
+  }
+
+  /* ------------------------------ 列表 ------------------------------ */
+  function applyFilter() {
+    var q = $("search").value.trim().toLowerCase();
+    var arr = state.items.slice();
+    state.view = $("viewSel").value === "sum" ? "sum" : "detail";
+    state.onlyBypass = $("btnOnlyBy").classList.contains("on");
+    if (state.onlyBypass) arr = arr.filter(function (it) { return it.rec.workflow && it.rec.workflow.bypassed.length; });
+    if (q) {
+      arr = arr.filter(function (it) {
+        var r = it.rec;
+        if ((r.name || "").toLowerCase().indexOf(q) >= 0) return true;
+        if ((r.positive || "").toLowerCase().indexOf(q) >= 0) return true;
+        if ((r.negative || "").toLowerCase().indexOf(q) >= 0) return true;
+        return (r.loras || []).some(function (l) { return String(l.name).toLowerCase().indexOf(q) >= 0; });
+      });
+    }
+    var s = $("sortSel").value;
+    arr.sort(function (a, b) {
+      if (s === "mtime-asc") return (a.rec.mtime || 0) - (b.rec.mtime || 0);
+      if (s === "name-asc") return a.name.localeCompare(b.name);
+      if (s === "seed") return Number(b.rec.seed || 0) - Number(a.rec.seed || 0);
+      return (b.rec.mtime || 0) - (a.rec.mtime || 0);
+    });
+    state.filtered = arr;
+    renderList();
+    if (state.view === "sum") renderDetail();
+    else if (state.selected && !arr.some(function (x) { return x.id === state.selected; })) {
+      state.selected = arr.length ? arr[0].id : null;
+      renderDetail();
+    }
+  }
+
+  function renderList() {
+    var box = $("list");
+    box.innerHTML = "";
+    if (!state.filtered.length) {
+      var d = el("div", "empty");
+      d.innerHTML = state.items.length ? t("listNoMatch") : t("listEmpty");
+      box.appendChild(d);
+      return;
+    }
+    var frag = document.createDocumentFragment();
+    state.filtered.forEach(function (it) {
+      var r = it.rec;
+      var row = el("div", "item" + (it.id === state.selected ? " sel" : "") + (r.error ? " bad" : ""));
+      var body = el("div", "body");
+      body.appendChild(el("div", "n", it.name));
+      var m = el("div", "m");
+      m.appendChild(el("span", null, r.error ? t("noMeta") : r.pngSize + "px"));
+      if (!r.error) {
+        m.appendChild(el("span", null, (r.loras ? r.loras.length : 0) + " LoRA"));
+        m.appendChild(el("span", null, "s" + fmtNum(r.steps)));
+      }
+      m.appendChild(el("span", null, fmtTime(r.mtime).slice(5)));
+      body.appendChild(m);
+      row.appendChild(body);
+      var mini = new Image();
+      mini.className = "mini"; mini.loading = "lazy"; mini.decoding = "async"; mini.alt = "";
+      mini.src = it.url;
+      row.appendChild(mini);
+      row.onclick = function () { select(it.id); };
+      frag.appendChild(row);
+    });
+    box.appendChild(frag);
+  }
+
+  function select(id) {
+    state.selected = id;
+    if (state.view === "sum") { $("viewSel").value = "detail"; state.view = "detail"; }
+    renderList();
+    renderDetail();
+    var sel = $("list").querySelector(".item.sel");
+    if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: "nearest" });
+  }
+
+  /* ------------------------------ 详情 ------------------------------ */
+  function card(k, v) {
+    var d = el("div", "card");
+    d.appendChild(el("div", "k", k));
+    d.appendChild(el("div", "v", v));
+    return d;
+  }
+
+  function loraRow(i, l, maxAbs) {
+    var row = el("div", "lora");
+    row.appendChild(el("div", "idx", String(i)));
+    var nm = el("div", "nm");
+    var parts = String(l.name).split("\\");
+    if (parts.length > 1) {
+      nm.appendChild(el("span", "dir", parts.slice(0, -1).join("\\") + "\\"));
+      nm.appendChild(el("span", null, parts[parts.length - 1]));
+    } else nm.textContent = l.name;
+    nm.title = l.name;
+    row.appendChild(nm);
+    var v = Number(l.strength);
+    var val = el("div", "val", isNaN(v) ? fmtNum(l.strength) : v.toFixed(2));
+    if (!isNaN(v)) val.style.color = v > 0 ? "var(--acc)" : (v < 0 ? "var(--bad)" : "var(--dim)");
+    row.appendChild(val);
+
+    var track = el("div", "track");
+    if (!isNaN(v)) {
+      var scale = maxAbs || 1, zeroPct = 50, posPct = 50 + (v / scale) * 50;
+      var z = el("div", "zero"); z.style.left = zeroPct + "%"; track.appendChild(z);
+      var f = el("div", "fill " + (v >= 0 ? "pos" : "neg"));
+      if (v >= 0) { f.style.left = zeroPct + "%"; f.style.width = (posPct - zeroPct) + "%"; }
+      else { f.style.left = posPct + "%"; f.style.width = (zeroPct - posPct) + "%"; }
+      track.appendChild(f);
+    }
+    row.appendChild(track);
+    return row;
+  }
+
+  function promptBlock(text, src, generated, note) {
+    var wrap = el("div", "prompt");
+    var pre = el("pre");
+    if (generated) {
+      pre.textContent = t("promptGenerated");
+      pre.style.color = "var(--dim2)";
+    } else {
+      pre.textContent = text || t("promptEmpty");
+      if (!text) pre.style.color = "var(--dim2)";
+    }
+    if ((text || "").length > 420) pre.classList.add("clip");
+    wrap.appendChild(pre);
+
+    var tools = el("div", "tools");
+    if ((text || "").length > 420) {
+      var tg = el("div", "iconbtn", "⌄"); tg.title = t("expand");
+      tg.onclick = function () {
+        pre.classList.toggle("clip");
+        tg.textContent = pre.classList.contains("clip") ? "⌄" : "⌃";
+      };
+      tools.appendChild(tg);
+    }
+    var cp = el("div", "iconbtn", "⧉"); cp.title = t("copy");
+    cp.onclick = function () { copy(text || ""); };
+    tools.appendChild(cp);
+    wrap.appendChild(tools);
+
+    var bits = [src || ""];
+    if (text) bits.push(LANG === "en" ? text.length + " chars" : text.length + " 字");
+    if (note) bits.push(note);
+    wrap.appendChild(el("div", "meta-line", bits.join("  ·  ")));
+    return wrap;
+  }
+
+  function openLightbox(url, caption) {
+    var lb = $("lightbox");
+    lb.querySelector("img").src = url;
+    lb.querySelector(".cap").textContent = caption || "";
+    lb.classList.add("on");
+  }
+  function closeLightbox() { $("lightbox").classList.remove("on"); }
+
+  function copy(text) {
+    var done = function () { toast(t("toastCopied", text.length)); };
+    var fallback = function () {
+      var ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch (e) { toast(t("toastCopyFail")); }
+      document.body.removeChild(ta);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  }
+
+  function renderDetail() {
+    var box = $("detail");
+    box.innerHTML = "";
+
+    if (state.view === "sum") { renderSum(box); return; }
+
+    var item = state.items.filter(function (x) { return x.id === state.selected; })[0];
+    if (!item) {
+      var d = el("div", "drop");
+      d.innerHTML = '<h2>' + t("dropTitle") + "</h2>" +
+        "<p>" + t("dropLead") + "</p>" +
+        '<p style="color:var(--dim2)">' + t("dropPrivacy") + "</p>" +
+        '<p style="margin-top:16px">' + t("dropKeys") + "</p>";
+      box.appendChild(d);
+      return;
+    }
+
+    var r = item.rec;
+    var hdr = el("div", "hdr");
+    var tw = el("div", "thumb-wrap");
+    var img = new Image();
+    img.className = "thumb"; img.src = item.url; img.loading = "lazy"; img.alt = item.name;
+    img.onclick = function () { openLightbox(item.url, item.name + "  ·  " + (r.pngSize || "") + " px"); };
+    tw.appendChild(img);
+    tw.appendChild(el("span", "zoomhint", t("zoomHint")));
+    hdr.appendChild(tw);
+
+    var info = el("div");
+    info.appendChild(el("h1", null, item.name));
+    info.appendChild(el("div", "sub", fmtTime(r.mtime) + "  ·  " + (r.pngSize || "") + " px  ·  " +
+      (r.size ? (r.size / 1024).toFixed(0) + " KB" : "")));
+    if (r.error) {
+      var e = el("div", "sub", "⚠ " + errorText(r));
+      e.style.color = "var(--warn)"; e.style.marginTop = "8px";
+      info.appendChild(e);
+    }
+    hdr.appendChild(info);
+    box.appendChild(hdr);
+
+    if (!r.error) {
+      var tools = el("div", "wftools");
+      var b1 = el("button", "primary", r._workflow ? t("exportWf") : t("rebuildExport"));
+      b1.onclick = function () { exportWorkflow(item); };
+      tools.appendChild(b1);
+      if (r._workflow) {
+        var b2 = el("button", null, t("rebuildCompare"));
+        b2.onclick = function () { composeExport(item); };
+        tools.appendChild(b2);
+      }
+      tools.appendChild(el("span", "hint", r._workflow ? t("hintVerbatim") : t("hintApiOnly")));
+      box.appendChild(tools);
+      var slot = el("div");
+      slot.id = "repSlot";
+      box.appendChild(slot);
+    }
+
+    if (r.error && r.a1111) {
+      box.appendChild(promptBlock(r.a1111, t("a1111Chunk"), false));
+      return;
+    }
+    if (r.error) return;
+
+    var cards = el("div", "cards");
+    cards.appendChild(card(t("kSeed"), fmtNum(r.seed)));
+    cards.appendChild(card(t("kSteps"), fmtNum(r.steps)));
+    cards.appendChild(card(t("kCfg"), fmtNum(r.cfg)));
+    cards.appendChild(card(t("kSampler"), (r.sampler || "—") + " / " + (r.scheduler || "—")));
+    cards.appendChild(card(t("kDenoise"), fmtNum(r.denoise)));
+    cards.appendChild(card(t("kLatent"), r.latent || "—"));
+    cards.appendChild(card(t("kBase"), r.baseModel || "—"));
+    cards.appendChild(card(t("kClip"), r.clip || "—"));
+    cards.appendChild(card(t("kVae"), r.vae || "—"));
+    cards.appendChild(card(t("kPrefix"), r.prefix || "—"));
+    box.appendChild(cards);
+
+    if (r.patches && r.patches.length) {
+      box.appendChild(secTitle(t("secPatches"), t("countUnit", r.patches.length)));
+      r.patches.forEach(function (p) {
+        var kv = Object.keys(p.params || {}).map(function (k) { return k + "=" + p.params[k]; }).join("  ");
+        box.appendChild(el("span", "chip", p.class_type + "#" + p.id + "  " + kv));
+      });
+    }
+
+    var loras = r.loras || [];
+    box.appendChild(secTitle(t("secLoras"), t("countUnit", loras.length)));
+    if (loras.length) {
+      var maxAbs = Math.max.apply(null, loras.map(function (l) { return Math.abs(Number(l.strength) || 0); }));
+      maxAbs = Math.max(maxAbs, 1);
+      var wrap = el("div");
+      loras.forEach(function (l, i) { wrap.appendChild(loraRow(i + 1, l, maxAbs)); });
+      box.appendChild(wrap);
+      var cpbar = el("div");
+      cpbar.style.marginTop = "10px";
+      var b = el("button", null, t("copyChain"));
+      b.onclick = function () {
+        copy(loras.map(function (l) { return l.name + ":" + Number(l.strength).toFixed(2); }).join("\n"));
+      };
+      cpbar.appendChild(b);
+      box.appendChild(cpbar);
+    } else {
+      box.appendChild(el("div", "meta-line", t("noLoras")));
+    }
+
+    if (r.workflow && (r.workflow.bypassed.length || r.workflow.muted.length)) {
+      box.appendChild(secTitle(t("secBypass"), t("countUnit", r.workflow.bypassed.length + r.workflow.muted.length)));
+      var chips = el("div");
+      r.workflow.bypassed.forEach(function (x) { chips.appendChild(el("span", "chip by", "bypass #" + x.id + " " + x.type)); });
+      r.workflow.muted.forEach(function (x) { chips.appendChild(el("span", "chip by", "mute #" + x.id + " " + x.type)); });
+      box.appendChild(chips);
+      box.appendChild(el("div", "meta-line", t("bypassNote")));
+    }
+
+    box.appendChild(secTitle(t("secPositive"), r.positive && !r.positiveGenerated ? (LANG === "en" ? r.positive.length + " chars" : r.positive.length + " 字") : ""));
+    box.appendChild(promptBlock(r.positive, r.positiveSrc, r.positiveGenerated));
+    box.appendChild(secTitle(t("secNegative"), r.negative && !r.negativeGenerated ? (LANG === "en" ? r.negative.length + " chars" : r.negative.length + " 字") : ""));
+    box.appendChild(promptBlock(r.negative, r.negativeSrc, r.negativeGenerated));
+
+    if (r.workflow && r.workflow.notes.length) {
+      box.appendChild(secTitle(t("secNotes"), t("countUnit", r.workflow.notes.length)));
+      r.workflow.notes.forEach(function (n) { box.appendChild(promptBlock(n.text, "Note#" + n.id, false)); });
+    }
+
+    box.appendChild(el("div", "meta-line", t("metaChunks",
+      (r.metaKeys || []).join(", "), r.nodeCount || 0, (r.workflow && r.workflow.nodeCount) || 0)));
+  }
+
+  function secTitle(text, cnt) {
+    var h = el("h3", "sec", text);
+    if (cnt) h.appendChild(el("span", "cnt", cnt));
+    return h;
+  }
+
+  /* ------------------------------ 汇总表 ------------------------------ */
+  function renderSum(box) {
+    var arr = state.filtered;
+    if (!arr.length) { box.appendChild(el("div", "empty", t("sumEmpty"))); return; }
+    box.appendChild(secTitle(t("sumTitle"), t("sumUnit", arr.length)));
+
+    var table = el("table", "sum");
+    var thead = el("thead"), tr = el("tr");
+    ["thName", "thTime", "thSize", "thSteps", "thCfg", "thLora", "thSeed", "thBase"].forEach(function (k) {
+      tr.appendChild(el("th", null, t(k)));
+    });
+    thead.appendChild(tr); table.appendChild(thead);
+    var tb = el("tbody");
+    arr.forEach(function (it) {
+      var r = it.rec, row = el("tr");
+      [it.name, fmtTime(r.mtime), r.pngSize || "", fmtNum(r.steps), fmtNum(r.cfg),
+       String((r.loras || []).length), fmtNum(r.seed), r.baseModel || ""].forEach(function (v) {
+        row.appendChild(el("td", null, v));
+      });
+      row.onclick = function () { select(it.id); };
+      tb.appendChild(row);
+    });
+    table.appendChild(tb);
+    box.appendChild(table);
+  }
+
+  /* ------------------------------ 导出 ------------------------------ */
+  function csvCell(v) {
+    var s = v === undefined || v === null ? "" : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function download(name, text, mime) {
+    var blob = new Blob([text], { type: (mime || "text/plain") + ";charset=utf-8" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+  }
+  function downloadBytes(name, u8, mime) {
+    var blob = new Blob([u8], { type: mime || "application/octet-stream" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 8000);
+  }
+
+  function baseName(n) { return n.replace(/\.png$/i, ""); }
+
+  function exportWorkflow(item) {
+    var r = item.rec;
+    if (r._workflow) {
+      download(baseName(item.name) + ".workflow.json", JSON.stringify(r._workflow, null, 2), "application/json");
+      toast(t("toastExportedWf"));
+      return;
+    }
+    if (state.template) { composeExport(item); return; }
+    toast(t("toastNoWorkflow"));
+  }
+
+  function composeExport(item, silent) {
+    if (!state.template) { toast(t("toastNeedTemplate")); return null; }
+    var out;
+    try {
+      out = ComfyPNG.composeWorkflow(state.template.json, item.rec, { lang: LANG });
+    } catch (e) {
+      toast(t("toastRebuildFail", (e && e.message || String(e))));
+      return null;
+    }
+    if (!silent) {
+      download(baseName(item.name) + ".rebuilt.json", JSON.stringify(out.workflow, null, 2), "application/json");
+      toast(t("toastRebuilt", out.report.length));
+    }
+    showReport(out);
+    return out;
+  }
+
+  function showReport(out) {
+    var slot = document.getElementById("repSlot");
+    if (!slot) return;
+    slot.innerHTML = "";
+    var box = el("div", "rep");
+    box.appendChild(el("div", "t", t("reportHead", state.template.name, out.report.length)));
+    out.report.slice(0, 40).forEach(function (line) { box.appendChild(el("div", "ok", "· " + line)); });
+    if (out.report.length > 40) box.appendChild(el("div", "", t("reportMore", out.report.length - 40)));
+    out.warnings.forEach(function (w) { box.appendChild(el("div", "wn", "⚠ " + w)); });
+    if (!out.warnings.length) box.appendChild(el("div", "ok", t("reportClean")));
+    slot.appendChild(box);
+  }
+
+  function exportZip() {
+    var list = state.filtered.filter(function (it) { return it.rec._workflow; });
+    if (!list.length) { toast(t("toastNoZip")); return; }
+    var enc = new TextEncoder();
+    var entries = list.map(function (it) {
+      return { name: baseName(it.name) + ".workflow.json",
+               data: enc.encode(JSON.stringify(it.rec._workflow, null, 2)) };
+    });
+    var zip = ComfyPNG.zipStore(entries);
+    downloadBytes("comfy_workflows_" + Date.now() + ".zip", zip, "application/zip");
+    toast(t("toastZipped", entries.length, (zip.length / 1024 / 1024).toFixed(1)));
+  }
+
+  function loadTemplate(file) {
+    file.text().then(function (txt) {
+      var json;
+      try { json = JSON.parse(txt); } catch (e) { toast(t("toastTplInvalid")); return; }
+      if (!json || !Array.isArray(json.nodes)) { toast(t("toastTplNotCanvas")); return; }
+      state.template = { name: file.name, json: json, nodes: json.nodes.length };
+      applyStatic();
+      toast(t("toastTplLoaded", file.name));
+      renderDetail();
+    });
+  }
+
+  function exportCsv() {
+    if (!state.filtered.length) { toast(t("toastNoData")); return; }
+    var cols = ["name", "mtime", "pngSize", "seed", "steps", "cfg", "sampler", "scheduler", "denoise",
+                "width", "height", "baseModel", "clip", "vae", "prefix", "loraCount", "loras", "positive", "negative"];
+    var lines = [cols.join(",")];
+    state.filtered.forEach(function (it) {
+      var r = it.rec;
+      var row = {
+        name: it.name, mtime: fmtTime(r.mtime), pngSize: r.pngSize, seed: r.seed, steps: r.steps,
+        cfg: r.cfg, sampler: r.sampler, scheduler: r.scheduler, denoise: r.denoise,
+        width: r.width, height: r.height, baseModel: r.baseModel, clip: r.clip, vae: r.vae,
+        prefix: r.prefix, loraCount: (r.loras || []).length,
+        loras: (r.loras || []).map(function (l) { return l.name + "=" + Number(l.strength).toFixed(2); }).join("; "),
+        positive: r.positive, negative: r.negative
+      };
+      lines.push(cols.map(function (c) { return csvCell(row[c]); }).join(","));
+    });
+    download("comfy_params_" + Date.now() + ".csv", "\ufeff" + lines.join("\r\n"), "text/csv");
+    toast(t("toastCsv", state.filtered.length));
+  }
+
+  function exportJson() {
+    if (!state.filtered.length) { toast(t("toastNoData")); return; }
+    var out = state.filtered.map(function (it) {
+      var r = JSON.parse(JSON.stringify(it.rec));
+      delete r._prompt; delete r._workflow;
+      r.file = it.rec.path || it.name;
+      return r;
+    });
+    download("comfy_params_" + Date.now() + ".json", JSON.stringify(out, null, 2), "application/json");
+    toast(t("toastJson", out.length));
+  }
+
+  function updateStat() {
+    var n = state.items.length;
+    var withMeta = state.items.filter(function (x) { return !x.rec.error; }).length;
+    $("stat").textContent = n ? t("statCount", n, withMeta) : t("statEmpty");
+  }
+
+  /* ------------------------------ 事件 ------------------------------ */
+  $("langZh").onclick = function () { setLang("zh"); };
+  $("langEn").onclick = function () { setLang("en"); };
+  $("btnFiles").onclick = function () { $("fileInput").click(); };
+  $("btnDir").onclick = function () { $("dirInput").click(); };
+  $("fileInput").onchange = function (e) { addFiles(e.target.files); e.target.value = ""; };
+  $("dirInput").onchange = function (e) { addFiles(e.target.files); e.target.value = ""; };
+  $("search").oninput = function () { applyFilter(); };
+  $("sortSel").onchange = function () { applyFilter(); };
+  $("viewSel").onchange = function () { applyFilter(); renderDetail(); };
+  $("btnOnlyBy").onclick = function () {
+    this.classList.toggle("on");
+    this.style.borderColor = this.classList.contains("on") ? "var(--acc)" : "";
+    this.style.color = this.classList.contains("on") ? "var(--acc)" : "";
+    applyFilter();
+  };
+  $("btnCsv").onclick = exportCsv;
+  $("btnJson").onclick = exportJson;
+  $("btnTpl").onclick = function () { $("tplInput").click(); };
+  $("tplInput").onchange = function (e) {
+    if (e.target.files && e.target.files[0]) loadTemplate(e.target.files[0]);
+    e.target.value = "";
+  };
+  $("btnZip").onclick = exportZip;
+  $("lightbox").onclick = closeLightbox;
+  $("btnClear").onclick = function () {
+    state.items.forEach(function (it) { try { URL.revokeObjectURL(it.url); } catch (e) {} });
+    state.items = []; state.filtered = []; state.selected = null;
+    renderList(); renderDetail(); updateStat();
+    toast(t("toastCleared"));
+  };
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { closeLightbox(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); $("search").focus(); return; }
+    if (document.activeElement && /input|select|textarea/i.test(document.activeElement.tagName)) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (!state.filtered.length) return;
+      e.preventDefault();
+      var idx = state.filtered.findIndex(function (x) { return x.id === state.selected; });
+      var next = e.key === "ArrowDown" ? idx + 1 : idx - 1;
+      next = Math.max(0, Math.min(state.filtered.length - 1, next));
+      select(state.filtered[next].id);
+    }
+  });
+
+  var dz = $("detail");
+  ["dragenter", "dragover"].forEach(function (ev) {
+    document.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add("hot"); });
+  });
+  ["dragleave", "drop"].forEach(function (ev) {
+    document.addEventListener(ev, function (e) {
+      if (ev === "drop") e.preventDefault();
+      if (ev === "dragleave" && e.relatedTarget) return;
+      dz.classList.remove("hot");
+    });
+  });
+  document.addEventListener("drop", function (e) {
+    e.preventDefault();
+    if (e.dataTransfer) addFromDrop(e.dataTransfer);
+  });
+
+  applyStatic();
+  renderList();
+  renderDetail();
+})();
+</script>
+</body>
+</html>

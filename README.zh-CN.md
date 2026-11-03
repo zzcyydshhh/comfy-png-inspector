@@ -1,4 +1,4 @@
-[English](README.md) ｜ **简体中文**
+﻿[English](README.md) ｜ **简体中文**
 
 # ComfyUI 参数检视台
 
@@ -6,7 +6,7 @@
 
 单页应用，双击 `index.html` 就能用。零依赖、零上传：图片不出你的机器，没有任何网络请求。
 
-![界面示意](docs/screenshot.jpg)
+![界面示意](docs/screenshot-zh.jpg)
 
 > 截图中的文件名、模型名、LoRA 名与提示词全部是合成的示例数据，不对应任何真实素材。
 
@@ -53,9 +53,11 @@ git clone https://github.com/zzcyydshhh/comfy-png-inspector.git
 cd comfy-png-inspector
 ```
 
-双击 `index.html`（Chrome / Edge 103+，需要 `DecompressionStream`），把 ComfyUI 的 `output` 文件夹拖进窗口。
+双击 **`comfy-png-inspector.html`**（Chrome / Edge 103+，需要 `DecompressionStream`），把 ComfyUI 的 `output` 文件夹拖进窗口。
 
-也可以在仓库 Pages 里直接打开，纯静态无需服务端。
+- 根目录的 `index.html` 只是一行跳转，为 GitHub Pages 存在；离线双击它也会自动进主文件。
+- 界面**中英双语**：右上角 `中文 / EN` 一键切换，会记住你的选择；默认跟随浏览器语言。
+- 想直接用英文版网址：`comfy-png-inspector.html?lang=en`（中文用 `?lang=zh`）。
 
 ---
 
@@ -127,8 +129,9 @@ dsh plugin add https://github.com/zzcyydshhh/comfy-png-inspector
 ## 目录
 
 ```
-index.html              单页应用（UI + 交互）
-comfy-png-core.js       解析与重组核心，浏览器 / Node 通用
+comfy-png-inspector.html  单页应用（UI + 交互，中英双语）
+index.html                跳转页，只为 GitHub Pages 的根路径
+comfy-png-core.js         解析与重组核心，浏览器 / Node 通用
 lib/index.js            DSH 插件：comfy_png_inspect 工具
 cordis.patch.yml        DSH 组合包的插件行声明
 cli/comfy_png_parse.py  命令行等价物，纯标准库

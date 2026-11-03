@@ -238,6 +238,7 @@
   /** 一条记录：PNG 字节 → 全部参数 */
   async function parsePng(bytes, fileInfo) {
     fileInfo = fileInfo || {};
+    var en = fileInfo.lang === 'en';
     var info = await readPngInfo(bytes);
     var rec = {
       name: fileInfo.name || 'image.png',
@@ -254,13 +255,15 @@
       workflow: { bypassed: [], muted: [], notes: [], nodeCount: 0 }
     };
     var prompt = null, workflow = null;
-    try { if (info.meta.prompt) prompt = JSON.parse(info.meta.prompt); } catch (e) { rec.warn = 'prompt 块 JSON 解析失败'; }
+    try { if (info.meta.prompt) prompt = JSON.parse(info.meta.prompt); } catch (e) { rec.warn = en ? 'the prompt chunk is not valid JSON' : 'prompt 块 JSON 解析失败'; }
     try { if (info.meta.workflow) workflow = JSON.parse(info.meta.workflow); } catch (e) {}
     if (prompt) Object.assign(rec, analyzePrompt(prompt));
     if (workflow) rec.workflow = analyzeWorkflow(workflow);
     if (!prompt && !workflow) {
       if (info.meta.parameters) rec.a1111 = info.meta.parameters;
-      else rec.error = '没有 ComfyUI 元数据（可能被软件重新保存过，元数据会丢）';
+      else rec.error = en
+        ? 'No ComfyUI metadata (it is lost when an image is re-saved by another tool)'
+        : '没有 ComfyUI 元数据（可能被软件重新保存过，元数据会丢）';
     }
     rec.metaKeys = Object.keys(info.meta);
     rec._prompt = prompt;
@@ -273,8 +276,52 @@
    * 原则：模板做深拷贝，绝不写回、绝不改动模板文件。
    * ================================================================== */
 
-  function fmtVal(v) {
-    if (v === undefined) return '（空）';
+  /* 重组报告的双语文案。参数化用函数，纯文本用字符串。 */
+  var COMPOSE_TEXT = {
+    zh: {
+      notTemplate: '模板不是画布工作流 JSON（缺少 nodes 数组）',
+      empty: '（空）',
+      prompt: '提示词', negative: '反向提示词', base: '底模', clip: 'CLIP', clipType: 'CLIP type',
+      vae: 'VAE', width: '宽度', height: '高度', seed: '种子', steps: '步数', cfg: 'CFG',
+      sampler: '采样器', scheduler: '调度器', denoise: '降噪', prefix: '保存前缀',
+      removeLoras: function (ids) { return '移除模板原有 LoRA 节点 ' + ids + '（只改这份副本）'; },
+      lora: function (i, n, id, name, s) { return 'LoRA ' + i + '/' + n + ' #' + id + '  ' + name + ' = ' + s; },
+      tail: function (type, id) { return '末端接到 ' + type + '#' + id + ' 的 model 输入'; },
+      noLoras: '这张图没有 LoRA，模板里的 LoRA 节点已全部摘除',
+      wNoHead: '模板里找不到 UNETLoader / CheckpointLoaderSimple，LoRA 链无法重建',
+      wNoConsumer: '没找到 LoRA 链的末端消费者，链条末端保持未连接',
+      wOrigin: function (l, id) { return '连线 ' + l + ' 的起点节点 ' + id + ' 不存在'; },
+      wTarget: function (l, id) { return '连线 ' + l + ' 的终点节点 ' + id + ' 不存在'; },
+      wSelf: function (l) { return '自连：连线 ' + l; },
+      wNoSampler: '副本里没有 KSampler',
+      wNoModel: 'KSampler 的 model 输入没有接线',
+      wNoPositive: 'KSampler 的 positive 没有接线',
+      wLoraCount: function (a, b) { return 'LoRA 节点数 ' + a + ' 与解析出的 ' + b + ' 个不一致'; }
+    },
+    en: {
+      notTemplate: 'Template is not a canvas workflow JSON (missing a nodes array)',
+      empty: '(empty)',
+      prompt: 'prompt', negative: 'negative prompt', base: 'base model', clip: 'CLIP', clipType: 'CLIP type',
+      vae: 'VAE', width: 'width', height: 'height', seed: 'seed', steps: 'steps', cfg: 'CFG',
+      sampler: 'sampler', scheduler: 'scheduler', denoise: 'denoise', prefix: 'save prefix',
+      removeLoras: function (ids) { return 'removed ' + ids + ' template LoRA node(s) (copy only)'; },
+      lora: function (i, n, id, name, s) { return 'LoRA ' + i + '/' + n + ' #' + id + '  ' + name + ' = ' + s; },
+      tail: function (type, id) { return 'tail wired into ' + type + '#' + id + ' model input'; },
+      noLoras: 'no LoRA in this image; every template LoRA node was dropped',
+      wNoHead: 'no UNETLoader / CheckpointLoaderSimple in the template — LoRA chain cannot be rebuilt',
+      wNoConsumer: 'no consumer found for the LoRA chain tail; tail left unconnected',
+      wOrigin: function (l, id) { return 'link ' + l + ' starts at missing node ' + id; },
+      wTarget: function (l, id) { return 'link ' + l + ' ends at missing node ' + id; },
+      wSelf: function (l) { return 'self link: ' + l; },
+      wNoSampler: 'no KSampler in the copy',
+      wNoModel: 'KSampler model input is not wired',
+      wNoPositive: 'KSampler positive input is not wired',
+      wLoraCount: function (a, b) { return a + ' LoRA node(s) in the copy vs ' + b + ' parsed'; }
+    }
+  };
+
+  function fmtVal(v, L) {
+    if (v === undefined) return L ? L.empty : '（空）';
     if (typeof v === 'string') return v.length > 60 ? JSON.stringify(v.slice(0, 60) + '…') : JSON.stringify(v);
     return String(v);
   }
@@ -295,10 +342,12 @@
   /**
    * @param {object} template 画布工作流 JSON（nodes/links/widgets_values）
    * @param {object} rec      parsePng 的结果
+   * @param {{lang?:'zh'|'en'}} [opts] 报告语言，默认中文
    * @returns {{workflow:object, report:string[], warnings:string[]}}
    */
-  function composeWorkflow(template, rec) {
-    if (!template || !Array.isArray(template.nodes)) throw new Error('模板不是画布工作流 JSON（缺少 nodes 数组）');
+  function composeWorkflow(template, rec, opts) {
+    var L = COMPOSE_TEXT[(opts && opts.lang) === 'en' ? 'en' : 'zh'];
+    if (!template || !Array.isArray(template.nodes)) throw new Error(L.notTemplate);
     var wf = deepest(template);
     var report = [], warnings = [];
     wf.nodes.forEach(function (n) { if (!n.inputs) n.inputs = []; if (!n.outputs) n.outputs = []; });
@@ -324,7 +373,7 @@
       var old = node.widgets_values[idx];
       if (old === val) return;
       node.widgets_values[idx] = val;
-      report.push(label + ' #' + node.id + '  ' + fmtVal(old) + ' → ' + fmtVal(val));
+      report.push(label + ' #' + node.id + '  ' + fmtVal(old, L) + ' → ' + fmtVal(val, L));
     }
     function addLink(origin, originSlot, target, targetSlot, type) {
       var id = ++nextLink;
@@ -340,7 +389,7 @@
 
     /* ---- 1. 文本 ---- */
     var enh = wf.nodes.filter(function (n) { return n.type === 'ZhPromptEnhance'; })[0];
-    if (enh && rec.positive) setW(enh, 0, rec.positive, '提示词');
+    if (enh && rec.positive) setW(enh, 0, rec.positive, L.prompt);
     else {
       var ks0 = wf.nodes.filter(function (n) { return n.type === 'KSampler' || n.type === 'KSamplerAdvanced'; })[0];
       if (ks0) {
@@ -355,33 +404,32 @@
           if (!src || src.type !== 'CLIPTextEncode') return;
           if ((src.inputs || []).some(function (x) { return x.name === 'text' && x.link !== null; })) return; // 文本来自连线，别覆盖
           var txt = key === 'positive' ? rec.positive : (rec.negativeGenerated ? '' : rec.negative);
-          if (txt) setW(src, 0, txt, key === 'positive' ? '正向提示词' : '反向提示词');
+          if (txt) setW(src, 0, txt, key === 'positive' ? L.prompt : L.negative);
         });
       }
     }
 
     /* ---- 2. 底模 / CLIP / VAE / latent / 采样 / 前缀 ---- */
     wf.nodes.forEach(function (n) {
-      if (n.type === 'UNETLoader' && rec.baseModel) setW(n, 0, rec.baseModel, '底模');
-      else if (n.type === 'CheckpointLoaderSimple' && rec.baseModel) setW(n, 0, rec.baseModel, '底模');
+      if (n.type === 'UNETLoader' && rec.baseModel) setW(n, 0, rec.baseModel, L.base);
+      else if (n.type === 'CheckpointLoaderSimple' && rec.baseModel) setW(n, 0, rec.baseModel, L.base);
       else if ((n.type === 'CLIPLoaderGGUF' || n.type === 'CLIPLoader') && rec.clipName) {
-        setW(n, 0, rec.clipName, 'CLIP');
-        if (rec.clipType) setW(n, 1, rec.clipType, 'CLIP type');
-      } else if (n.type === 'VAELoader' && rec.vaeName) setW(n, 0, rec.vaeName, 'VAE');
+        setW(n, 0, rec.clipName, L.clip);
+        if (rec.clipType) setW(n, 1, rec.clipType, L.clipType);
+      } else if (n.type === 'VAELoader' && rec.vaeName) setW(n, 0, rec.vaeName, L.vae);
       else if (/^Empty.*Latent/.test(n.type) && rec.width && rec.height) {
-        setW(n, 0, rec.width, '宽度');
-        setW(n, 1, rec.height, '高度');
+        setW(n, 0, rec.width, L.width);
+        setW(n, 1, rec.height, L.height);
       } else if (n.type === 'KSampler' || n.type === 'KSamplerAdvanced') {
-        var off = n.type === 'KSamplerAdvanced' ? 1 : 0;   // Advanced 多了 add_noise / start_at_step 等，只动稳妥的项
         if (n.type === 'KSampler') {
-          if (rec.seed !== undefined && rec.seed !== null) setW(n, 0, rec.seed, '种子');
-          if (rec.steps !== undefined) setW(n, 2, rec.steps, '步数');
-          if (rec.cfg !== undefined) setW(n, 3, rec.cfg, 'CFG');
-          if (rec.sampler) setW(n, 4, rec.sampler, '采样器');
-          if (rec.scheduler) setW(n, 5, rec.scheduler, '调度器');
-          if (rec.denoise !== undefined) setW(n, 6, rec.denoise, '降噪');
+          if (rec.seed !== undefined && rec.seed !== null) setW(n, 0, rec.seed, L.seed);
+          if (rec.steps !== undefined) setW(n, 2, rec.steps, L.steps);
+          if (rec.cfg !== undefined) setW(n, 3, rec.cfg, L.cfg);
+          if (rec.sampler) setW(n, 4, rec.sampler, L.sampler);
+          if (rec.scheduler) setW(n, 5, rec.scheduler, L.scheduler);
+          if (rec.denoise !== undefined) setW(n, 6, rec.denoise, L.denoise);
         }
-      } else if (n.type === 'SaveImage' && rec.prefix) setW(n, 0, rec.prefix, '保存前缀');
+      } else if (n.type === 'SaveImage' && rec.prefix) setW(n, 0, rec.prefix, L.prefix);
     });
 
     /* ---- 3. 重建 LoRA 链 ---- */
@@ -391,9 +439,8 @@
       return n.type === 'UNETLoader' || n.type === 'CheckpointLoaderSimple';
     })[0];
     if (!head) {
-      warnings.push('模板里找不到 UNETLoader / CheckpointLoaderSimple，LoRA 链无法重建');
+      warnings.push(L.wNoHead);
     } else {
-      // 顺着 head 的 MODEL 输出走到第一个非 LoRA 消费者
       var lmap = {};
       wf.links.forEach(function (l) { lmap[l[0]] = l; });
       var cur = head, consumer = null, consumerSlot = -1, guard = 0;
@@ -413,12 +460,9 @@
       var basePos = proto && proto.pos ? proto.pos.slice() : [head.pos ? head.pos[0] : 100, (head.pos ? head.pos[1] : 100) + 120];
       var protoProps = proto && proto.properties ? deepest(proto.properties) : { 'Node name for S&R': 'LoraLoaderModelOnly' };
 
-      // 摘掉模板原有的 LoRA 节点及连线
       var dead = {};
       loraNodes.forEach(function (n) { dead[n.id] = 1; });
-      if (Object.keys(dead).length) {
-        report.push('移除模板原有 LoRA 节点 ' + Object.keys(dead).join(',') + '（只改这份副本）');
-      }
+      if (Object.keys(dead).length) report.push(L.removeLoras(Object.keys(dead).join(',')));
       wf.nodes = wf.nodes.filter(function (n) { return !dead[n.id]; });
       wf.links = wf.links.filter(function (l) { return !dead[l[1]] && !dead[l[3]]; });
       resyncNodeRefs(wf);
@@ -447,16 +491,16 @@
         wf.nodes.push(node);
         addLink(tailId, tailSlot, nid, 0, 'MODEL');
         tailId = nid; tailSlot = 0;
-        report.push('LoRA ' + (i + 1) + '/' + loras.length + ' #' + nid + '  ' + l.name + ' = ' + strength.toFixed(2));
+        report.push(L.lora(i + 1, loras.length, nid, l.name, strength.toFixed(2)));
       });
 
       if (consumer && consumerSlot >= 0) {
         addLink(tailId, tailSlot, consumer.id, consumerSlot, 'MODEL');
-        report.push('末端接到 ' + consumer.type + '#' + consumer.id + ' 的 model 输入');
+        report.push(L.tail(consumer.type, consumer.id));
       } else if (loras.length) {
-        warnings.push('没找到 LoRA 链的末端消费者，链条末端保持未连接');
+        warnings.push(L.wNoConsumer);
       }
-      if (!loras.length) report.push('这张图没有 LoRA，模板里的 LoRA 节点已全部摘除');
+      if (!loras.length) report.push(L.noLoras);
     }
 
     wf.last_node_id = nextNode;
@@ -464,23 +508,23 @@
     resyncNodeRefs(wf);
 
     /* ---- 4. 自检 ---- */
-    var ids = {}, id2type = {};
-    wf.nodes.forEach(function (n) { ids[n.id] = 1; id2type[n.id] = n.type; });
+    var ids = {};
+    wf.nodes.forEach(function (n) { ids[n.id] = 1; });
     wf.links.forEach(function (l) {
-      if (!ids[l[1]]) warnings.push('连线 ' + l[0] + ' 的起点节点 ' + l[1] + ' 不存在');
-      if (!ids[l[3]]) warnings.push('连线 ' + l[0] + ' 的终点节点 ' + l[3] + ' 不存在');
-      if (l[1] === l[3]) warnings.push('自连：连线 ' + l[0]);
+      if (!ids[l[1]]) warnings.push(L.wOrigin(l[0], l[1]));
+      if (!ids[l[3]]) warnings.push(L.wTarget(l[0], l[3]));
+      if (l[1] === l[3]) warnings.push(L.wSelf(l[0]));
     });
     var ks = wf.nodes.filter(function (n) { return n.type === 'KSampler' || n.type === 'KSamplerAdvanced'; })[0];
-    if (!ks) warnings.push('副本里没有 KSampler');
+    if (!ks) warnings.push(L.wNoSampler);
     else {
       var mi = inputIndex(ks, 'model');
-      if (mi < 0 || ks.inputs[mi].link === null) warnings.push('KSampler 的 model 输入没有接线');
+      if (mi < 0 || ks.inputs[mi].link === null) warnings.push(L.wNoModel);
       var pi = inputIndex(ks, 'positive');
-      if (pi < 0 || ks.inputs[pi].link === null) warnings.push('KSampler 的 positive 没有接线');
+      if (pi < 0 || ks.inputs[pi].link === null) warnings.push(L.wNoPositive);
     }
     var loraCount = wf.nodes.filter(function (n) { return n.type.indexOf('LoraLoader') === 0; }).length;
-    if (loraCount !== loras.length) warnings.push('LoRA 节点数 ' + loraCount + ' 与解析出的 ' + loras.length + ' 个不一致');
+    if (loraCount !== loras.length) warnings.push(L.wLoraCount(loraCount, loras.length));
 
     return { workflow: wf, report: report, warnings: warnings };
   }
